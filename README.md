@@ -1,20 +1,19 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# Deployment on Hostinger VPS using Dokploy
 
-# Run and deploy your AI Studio app
+1. Go to your Dokploy panel.
+2. Create a new PostgreSQL Database in Dokploy. Note the database connection string.
+3. Create a new Application in Dokploy connected to your Git repository (or using Docker).
+4. In the Application's Environment settings, add the following environment variable:
+   `DATABASE_URL=postgresql://dmist2232%40gmail.com:200732503140@sisaranew-sisara-en5m2b:5432/SISARA` 
+   (or use the connection string provided by Dokploy).
+5. Build and Deploy!
 
-This contains everything you need to run your app locally.
+## Important Note About Preview Errors
 
-View your app in AI Studio: https://ai.studio/apps/125455e0-caef-4860-87e4-19a5741ab983
+If you see errors like **"Database connection failed: getaddrinfo EAI_AGAIN sisaranew-sisara-en5m2b"** in the AI Studio preview, **this is expected and normal.**
 
-## Run Locally
+*   `sisaranew-sisara-en5m2b` is an **internal hostname** that only exists inside your Hostinger VPS / Dokploy network.
+*   The AI Studio preview environment runs on the public internet and cannot connect to your VPS's internal private network.
+*   **Once you deploy this code to your Dokploy application**, it will be running inside the same network as your database and will connect smoothly without these errors.
 
-**Prerequisites:**  Node.js
-
-
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+The code is fully ready for deployment!
