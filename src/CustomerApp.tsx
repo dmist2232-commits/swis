@@ -65,7 +65,7 @@ function Home() {
   const { menu, settings } = useStore();
   const navigate = useNavigate();
   const [cart, setCart] = useState<any[]>([]);
-  const [activeCategory, setActiveCategory] = useState('rice');
+  const [activeCategory, setActiveCategory] = useState('all');
   const [search, setSearch] = useState('');
 
   const addToCart = (item: any) => {
@@ -145,9 +145,9 @@ function Home() {
         
         {/* Banners Area */}
         {parsedBanners.length > 0 && (
-          <div className="mb-6 overflow-x-auto flex gap-4 snap-x snap-mandatory scrollbar-hide pb-2">
+          <div className="mb-8 overflow-x-auto flex gap-4 snap-x snap-mandatory scrollbar-hide pb-2">
             {parsedBanners.map((url, idx) => (
-              <img key={idx} src={url} alt={`Banner ${idx + 1}`} className="w-full md:w-[600px] h-48 md:h-64 object-cover rounded-2xl shadow-sm flex-shrink-0 snap-center" />
+              <img key={idx} src={url} alt={`Banner ${idx + 1}`} className="w-full md:w-full h-48 md:h-[450px] object-cover rounded-2xl shadow-sm flex-shrink-0 snap-center" />
             ))}
           </div>
         )}
@@ -413,7 +413,10 @@ function CustomerReviews() {
 
 function Checkout() {
   const navigate = useNavigate();
-  const { settings } = useStore();
+  const { settings, orders } = useStore();
+  const [waitingForConfirmation, setWaitingForConfirmation] = useState(false);
+  const [placedOrderNumber, setPlacedOrderNumber] = useState<number | null>(null);
+  const [countdown, setCountdown] = useState(300);
   const [cart, setCart] = useState<any[]>(() => {
     try {
       const state = (window.history.state as any)?.usr?.cart;
@@ -479,14 +482,36 @@ function Checkout() {
       toast.error("Please fill all details");
       return;
     }
-    
-    if (paymentMethod === 'card') {
-      setShowPaymentModal(true);
-      setPaymentStep(1);
-    } else {
-      placeOrder();
-    }
+    placeOrder();
   };
+
+  useEffect(() => {
+    if (waitingForConfirmation && placedOrderNumber !== null) {
+      const placedOrder = orders.find(o => o.orderNumber === placedOrderNumber);
+      if (placedOrder) {
+        if (placedOrder.status === 'accepted' || placedOrder.status === 'cooking' || placedOrder.status === 'onway') {
+          setWaitingForConfirmation(false);
+          setShowPaymentModal(true);
+          setPaymentStep(1);
+        } else if (placedOrder.status === 'cancelled' || placedOrder.status === 'rejected') {
+          setWaitingForConfirmation(false);
+          toast.error("Shop cancelled the order. No charges were made.");
+          navigate('/my-orders');
+        }
+      }
+    }
+  }, [orders, waitingForConfirmation, placedOrderNumber]);
+
+  useEffect(() => {
+    if (waitingForConfirmation && countdown > 0) {
+      const timer = setTimeout(() => setCountdown(c => c - 1), 1000);
+      return () => clearTimeout(timer);
+    } else if (waitingForConfirmation && countdown === 0) {
+      setWaitingForConfirmation(false);
+      toast.error("Shop did not respond in time. Order timeout.");
+      navigate('/my-orders');
+    }
+  }, [waitingForConfirmation, countdown]);
 
   const placeOrder = async () => {
     const payload = {
@@ -514,9 +539,16 @@ function Checkout() {
       myOrders.push(data.orderNumber);
       localStorage.setItem('myOrders', JSON.stringify(myOrders));
       
-      toast.success("Order Placed successfully!");
-      setShowPaymentModal(false);
-      navigate('/my-orders');
+      if (paymentMethod === 'card') {
+        toast.success("Order sent! Waiting for shop to confirm...");
+        setPlacedOrderNumber(data.orderNumber);
+        setWaitingForConfirmation(true);
+        setCountdown(300);
+      } else {
+        toast.success("Order Placed successfully!");
+        setShowPaymentModal(false);
+        navigate('/my-orders');
+      }
     } catch (e) {
       toast.error("Failed to place order.");
     }
@@ -526,7 +558,8 @@ function Checkout() {
     toast.loading("Verifying OTP...", { id: 'otp' });
     setTimeout(() => {
       toast.success("Payment Successful!", { id: 'otp' });
-      placeOrder();
+      setShowPaymentModal(false);
+      navigate('/my-orders');
     }, 1500);
   };
 
@@ -534,6 +567,29 @@ function Checkout() {
 
   return (
     <div className="min-h-screen bg-spicy-pattern pb-24 text-gray-900">
+      {/* Waiting for Confirmation Modal */}
+      <AnimatePresence>
+        {waitingForConfirmation && (
+          <motion.div 
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm"
+          >
+            <motion.div 
+              initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 20 }}
+              className="bg-white rounded-2xl w-full max-w-md p-8 text-center shadow-2xl"
+            >
+              <div className="w-16 h-16 border-4 border-red-200 border-t-red-600 rounded-full animate-spin mx-auto mb-6"></div>
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">Waiting for Shop</h2>
+              <p className="text-gray-500 mb-6">Please wait while the shop confirms your order. Don't leave this page until timeout.</p>
+              <div className="text-4xl font-bold text-red-600 mb-2">
+                {Math.floor(countdown / 60)}:{(countdown % 60).toString().padStart(2, '0')}
+              </div>
+              <p className="text-sm text-gray-400">Timeout in {countdown} seconds</p>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Fake PayHere Modal */}
       <AnimatePresence>
         {showPaymentModal && (
