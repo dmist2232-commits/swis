@@ -28,7 +28,7 @@ export interface Order {
   deliveryCharge: number;
   total: number;
   paymentMethod: string;
-  status: 'pending' | 'accepted' | 'cancelled' | 'cooking' | 'onway' | 'delivered';
+  status: 'pending' | 'accepted' | 'cancelled' | 'cooking' | 'onway' | 'delivered' | 'rejected';
   deliveryGuyNumber: string;
   createdAt: string;
 }
@@ -41,7 +41,7 @@ export interface Settings {
   hostLat: string;
   hostLng: string;
   lastOrderNumber: string;
-  lastOrderDate: string;
+  lastOrderDate: string;  logoUrl?: string;
   banners?: string;
   adminPassword?: string;
   hostPassword?: string;
