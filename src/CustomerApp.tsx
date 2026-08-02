@@ -105,7 +105,7 @@ function Home() {
       {/* Mobile Header */}
       <header className={`md:hidden bg-white p-4 shadow-sm sticky z-20 flex justify-between items-center ${settings?.currentEvent ? 'top-8' : 'top-0'}`}>
         <div>
-          <h1 className="text-xl font-bold text-red-600">GRAND SPICY සිසාරා</h1>
+          {settings?.logoUrl ? <img src={settings.logoUrl} alt="Logo" className="h-8 object-contain" /> : <h1 className="text-xl font-bold text-red-600">GRAND SPICY සිසාරා</h1>}
           <p className="text-xs text-gray-500 flex items-center gap-1"><MapPin size={12}/> Veyangoda</p>
         </div>
         <Link to="/profile" className="p-2 bg-gray-100 rounded-full text-gray-600">
@@ -119,7 +119,7 @@ function Home() {
         {/* Desktop Header */}
         <div className="hidden md:flex justify-between items-center mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-red-600">GRAND SPICY සිසාරා</h1>
+            {settings?.logoUrl ? <img src={settings.logoUrl} alt="Logo" className="h-12 object-contain" /> : <h1 className="text-3xl font-bold text-red-600">GRAND SPICY සිසාරා</h1>}
             <p className="text-sm text-gray-500 flex items-center gap-1 mt-1"><MapPin size={16}/> 5335+H5H, Veyangoda 11100</p>
           </div>
           <div className="flex items-center gap-6">

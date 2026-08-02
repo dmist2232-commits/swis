@@ -17,19 +17,24 @@ app.use(cors());
 app.use(express.json());
 
 // Initialize PostgreSQL Database
-const db = new Database('database.sqlite');
+import fsSync from 'fs';
+if (!fsSync.existsSync('./data')) {
+  fsSync.mkdirSync('./data');
+}
+const db = new Database('./data/database.sqlite');
 db.pragma('journal_mode = WAL');
 
 const pool = {
   query: async (text, params = []) => {
-    // Replace $1, $2 with ?
     const sqliteText = text.replace(/\$\d+/g, '?');
-    
-    // SQLite doesn't support SERIAL, replace it with INTEGER PRIMARY KEY AUTOINCREMENT
-    // Only replacing in CREATE TABLE statements implicitly if needed, but better to do it directly in text
     let modifiedText = sqliteText.replace(/SERIAL PRIMARY KEY/g, 'INTEGER PRIMARY KEY AUTOINCREMENT');
     
     try {
+      if (params.length === 0 && modifiedText.includes(';\n')) {
+        db.exec(modifiedText);
+        return { rows: [], rowCount: 0 };
+      }
+      
       if (modifiedText.trim().toUpperCase().startsWith('SELECT') || modifiedText.trim().toUpperCase().startsWith('PRAGMA')) {
         const rows = db.prepare(modifiedText).all(...params);
         return { rows };
@@ -38,7 +43,7 @@ const pool = {
         return { rows: [], rowCount: result.changes };
       }
     } catch (e) {
-      console.error("DB Error:", e);
+      console.error("DB Error with query:", text, e);
       throw e;
     }
   },
