@@ -29,11 +29,37 @@ pool.on('error', (err, client) => {
 });
 
 
+
+// Fallback In-Memory State for Preview Environment
+let inMemoryState = {
+  settings: {
+    adminPassword: '200732503140',
+    hostPassword: '132333435363',
+    currentEvent: '',
+    perKmRate: '100',
+    firstKmRate: '150',
+    shopPhone: '0112345678',
+    payHereId: '',
+    hostLat: '7.1652',
+    hostLng: '80.0573',
+    lastOrderNumber: '1000',
+    banners: '[]',
+    lastOrderDate: new Date().toISOString().split('T')[0]
+  },
+  menu_items: [],
+  orders: [],
+  feedbacks: []
+};
+let isDbConnected = false;
+
 // Simple Schema Setup
+
 const initDb = async (retries = 1) => {
   while (retries) {
     try {
       await pool.query('SELECT 1'); // Test connection
+      isDbConnected = true;
+
       await pool.query(`
         CREATE TABLE IF NOT EXISTS settings (
         key TEXT PRIMARY KEY,
@@ -128,18 +154,30 @@ initDb();
 
 // Helper to broadcast state changes
 const broadcastOrders = async () => {
+  if (!isDbConnected) {
+    io.emit('orders_updated', inMemoryState.orders);
+    return;
+  }
   const result = await pool.query('SELECT * FROM orders ORDER BY id DESC');
   io.emit('orders_updated', result.rows);
 };
 
 const broadcastMenu = async () => {
+  if (!isDbConnected) {
+    io.emit('menu_updated', inMemoryState.menu_items);
+    return;
+  }
   const result = await pool.query('SELECT * FROM menu_items');
   io.emit('menu_updated', result.rows);
 };
 
 const broadcastSettings = async () => {
+  if (!isDbConnected) {
+    io.emit('settings_updated', inMemoryState.settings);
+    return;
+  }
   const result = await pool.query('SELECT * FROM settings');
-  const settingsObj = result.rows.reduce((acc: any, curr: any) => {
+  const settingsObj = result.rows.reduce((acc, curr) => {
     acc[curr.key] = curr.value;
     return acc;
   }, {});
@@ -153,17 +191,23 @@ const broadcastFeedbacks = async () => {
 
 // API Routes
 app.get('/api/state', async (req, res) => {
+  if (!isDbConnected) {
+    return res.json({
+      orders: inMemoryState.orders,
+      menu: inMemoryState.menu_items,
+      settings: inMemoryState.settings,
+      feedbacks: inMemoryState.feedbacks
+    });
+  }
   try {
     const ordersRes = await pool.query('SELECT * FROM orders ORDER BY id DESC');
     const menuRes = await pool.query('SELECT * FROM menu_items');
     const settingsRes = await pool.query('SELECT * FROM settings');
     const feedbacksRes = await pool.query('SELECT * FROM feedbacks ORDER BY id DESC');
-
-    const settings = settingsRes.rows.reduce((acc: any, curr: any) => {
+    const settings = settingsRes.rows.reduce((acc, curr) => {
       acc[curr.key] = curr.value;
       return acc;
     }, {});
-
     res.json({ 
       orders: ordersRes.rows, 
       menu: menuRes.rows, 
@@ -172,16 +216,7 @@ app.get('/api/state', async (req, res) => {
     });
   } catch (error) {
     console.error("Error fetching state:", error);
-    // Return empty state for preview environment gracefully
-    res.json({ 
-      orders: [], 
-      menu: [], 
-      settings: {
-        lastOrderDate: new Date().toISOString().split('T')[0],
-        lastOrderNumber: '1000'
-      }, 
-      feedbacks: [] 
-    });
+    res.json({ orders: [], menu: [], settings: {}, feedbacks: [] });
   }
 });
 
@@ -283,6 +318,12 @@ app.patch('/api/orders/:id', async (req, res) => {
 app.post('/api/menu', async (req, res) => {
   try {
     const { category, name, description, price, image } = req.body;
+    if (!isDbConnected) {
+      const id = inMemoryState.menu_items.length + 1;
+      inMemoryState.menu_items.push({ id, category, name, description, price: parseFloat(price), image: image || '' });
+      broadcastMenu();
+      return res.json({ success: true });
+    }
     await pool.query(
       'INSERT INTO menu_items (category, name, description, price, image) VALUES ($1, $2, $3, $4, $5)',
       [category, name, description, parseFloat(price), image || '']
@@ -297,6 +338,11 @@ app.post('/api/menu', async (req, res) => {
 
 app.delete('/api/menu/:id', async (req, res) => {
   try {
+    if (!isDbConnected) {
+      inMemoryState.menu_items = inMemoryState.menu_items.filter(item => item.id !== parseInt(req.params.id));
+      broadcastMenu();
+      return res.json({ success: true });
+    }
     await pool.query('DELETE FROM menu_items WHERE id = $1', [req.params.id]);
     broadcastMenu();
     res.json({ success: true });
