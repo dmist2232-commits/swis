@@ -108,7 +108,8 @@ function OrdersView() {
   const { orders } = useStore();
   const [filter, setFilter] = useState('all');
   
-  const filteredOrders = filter === 'all' ? orders : orders.filter(o => o.status === filter);
+  const sortedOrders = [...orders].sort((a, b) => b.id - a.id);
+  const filteredOrders = filter === 'all' ? sortedOrders : sortedOrders.filter(o => o.status === filter);
 
   const updateStatus = async (id: number, status: string) => {
     await fetch(`/api/orders/${id}`, {
@@ -214,7 +215,7 @@ function OrdersView() {
 
       <div className="grid gap-4">
         {filteredOrders.map(order => (
-          <div key={order.id} className="bg-white p-6 rounded-2xl shadow-sm border border-stone-200 flex flex-col xl:flex-row gap-6">
+          <div key={order.id} className={`p-6 rounded-2xl shadow-sm border flex flex-col xl:flex-row gap-6 ${order.status === 'delivered' ? 'bg-green-50 border-green-500 shadow-green-100' : (order.paymentMethod === 'card' && order.status === 'accepted') ? 'bg-blue-50 border-blue-500 ring-2 ring-blue-300' : 'bg-white border-stone-200'}`}>
             <div className="flex-1 space-y-4">
               <div className="flex justify-between">
                 <div>
@@ -226,7 +227,7 @@ function OrdersView() {
                   <span className={`px-3 py-1 rounded-full text-sm font-bold capitalize border
                     ${order.status === 'pending' ? 'bg-stone-100 text-stone-700' : 
                       order.status === 'accepted' ? 'bg-blue-100 text-blue-700' : 
-                      order.status === 'cancelled' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}
+                      order.status === 'delivered' ? 'bg-green-500 text-white border-green-600' : order.status === 'cancelled' || order.status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}
                   `}>
                     {order.status}
                   </span>

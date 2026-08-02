@@ -793,15 +793,16 @@ function MyOrders() {
   const navigate = useNavigate();
   const myOrderNumbers = JSON.parse(localStorage.getItem('myOrders') || '[]');
   
-  const myOrders = orders.filter(o => myOrderNumbers.includes(o.orderNumber));
+  const myOrders = orders.filter(o => myOrderNumbers.includes(o.orderNumber)).sort((a, b) => b.id - a.id);
 
-  const statusColors = {
+  const statusColors: Record<string, string> = {
     pending: 'bg-gray-100 text-gray-700',
     accepted: 'bg-blue-50 text-blue-700 border-blue-200',
     cancelled: 'bg-red-50 text-red-700 border-red-200',
+    rejected: 'bg-red-50 text-red-700 border-red-200',
     cooking: 'bg-orange-50 text-orange-700 border-orange-200',
     onway: 'bg-purple-50 text-purple-700 border-purple-200',
-    delivered: 'bg-green-50 text-green-700 border-green-200',
+    delivered: 'bg-green-500 text-white border-green-600',
   };
 
   return (
@@ -819,7 +820,7 @@ function MyOrders() {
           </div>
         ) : (
           myOrders.map(order => (
-            <div key={order.id} className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
+            <div key={order.id} className={`p-5 rounded-2xl shadow-sm border ${order.status === 'delivered' ? 'bg-green-50 border-green-500' : (order.paymentMethod === 'card' && order.status === 'accepted') ? 'bg-blue-50 border-blue-500 ring-2 ring-blue-300' : 'bg-white border-gray-100'}`}>
               <div className="flex justify-between items-start mb-4 border-b border-gray-100 pb-4">
                 <div>
                   <h3 className="font-bold text-lg text-gray-900">Order #{order.orderNumber}</h3>
