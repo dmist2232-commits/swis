@@ -1,5 +1,5 @@
 {
-  "name": "Grand Spicy Sisara",
+  "name": "Remix Remix Grand Spicy Sisara",
   "description": "Realtime restaurant ordering system with admin and host portals.",
   "requestFramePermissions": [
     "geolocation"

@@ -1,10 +1,13 @@
 import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
-import Database from 'better-sqlite3';
+import { Pool } from 'pg';
 import path from 'path';
 import cors from 'cors';
 import { createServer as createViteServer } from 'vite';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 const PORT = 3000;
 const app = express();
@@ -12,43 +15,19 @@ const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: { origin: '*' }
 });
-
 app.use(cors());
 app.use(express.json());
 
 // Initialize PostgreSQL Database
-import fsSync from 'fs';
-if (!fsSync.existsSync('./data')) {
-  fsSync.mkdirSync('./data');
-}
-const db = new Database('./data/database.sqlite');
-db.pragma('journal_mode = WAL');
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.DATABASE_URL && process.env.DATABASE_URL.includes('localhost') ? false : { rejectUnauthorized: false }
+});
 
-const pool = {
-  query: async (text, params = []) => {
-    const sqliteText = text.replace(/\$\d+/g, '?');
-    let modifiedText = sqliteText.replace(/SERIAL PRIMARY KEY/g, 'INTEGER PRIMARY KEY AUTOINCREMENT');
-    
-    try {
-      if (params.length === 0 && modifiedText.includes(';\n')) {
-        db.exec(modifiedText);
-        return { rows: [], rowCount: 0 };
-      }
-      
-      if (modifiedText.trim().toUpperCase().startsWith('SELECT') || modifiedText.trim().toUpperCase().startsWith('PRAGMA')) {
-        const rows = db.prepare(modifiedText).all(...params);
-        return { rows };
-      } else {
-        const result = db.prepare(modifiedText).run(...params);
-        return { rows: [], rowCount: result.changes };
-      }
-    } catch (e) {
-      console.error("DB Error with query:", text, e);
-      throw e;
-    }
-  },
-  on: () => {}
-};
+pool.on('error', (err, client) => {
+  console.error('Unexpected error on idle client', err);
+});
+
 
 // Simple Schema Setup
 const initDb = async (retries = 1) => {
