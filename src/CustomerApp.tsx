@@ -146,9 +146,14 @@ function Home() {
         {/* Banners Area */}
         {parsedBanners.length > 0 && (
           <div className="mb-8 overflow-x-auto flex gap-4 snap-x snap-mandatory scrollbar-hide pb-2">
-            {parsedBanners.map((url, idx) => (
-              <img key={idx} src={url} alt={`Banner ${idx + 1}`} className="w-full md:w-full h-48 md:h-[450px] object-cover rounded-2xl shadow-sm flex-shrink-0 snap-center" />
-            ))}
+            {parsedBanners.map((url, idx) => {
+              const isVideo = url.match(/\.(mp4|webm|ogg)$/i) || url.includes('video');
+              return isVideo ? (
+                <video key={idx} src={url} autoPlay loop muted playsInline className="w-full md:w-full h-48 md:h-[450px] object-cover rounded-2xl shadow-sm flex-shrink-0 snap-center" />
+              ) : (
+                <img key={idx} src={url} alt={`Banner ${idx + 1}`} className="w-full md:w-full h-48 md:h-[450px] object-cover rounded-2xl shadow-sm flex-shrink-0 snap-center" />
+              );
+            })}
           </div>
         )}
 
@@ -554,13 +559,35 @@ function Checkout() {
     }
   };
 
-  const processPayment = () => {
+  const processPayment = async () => {
     toast.loading("Verifying OTP...", { id: 'otp' });
-    setTimeout(() => {
+    setTimeout(async () => {
+      const orderId = orders.find(o => o.orderNumber === placedOrderNumber)?.id;
+      if (orderId) {
+        await fetch('/api/orders/' + orderId, {
+          method: 'PATCH',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ extraNotes: 'Payment Successful (Card)' })
+        });
+      }
       toast.success("Payment Successful!", { id: 'otp' });
       setShowPaymentModal(false);
       navigate('/my-orders');
     }, 1500);
+  };
+
+  const handlePaymentCancel = async () => {
+    const orderId = orders.find(o => o.orderNumber === placedOrderNumber)?.id;
+    if (orderId) {
+        await fetch('/api/orders/' + orderId, {
+          method: 'PATCH',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ status: 'cancelled', extraNotes: 'Payment Failed (Card)' })
+        });
+    }
+    toast.error("Payment Cancelled / Failed");
+    setShowPaymentModal(false);
+    navigate('/my-orders');
   };
 
   if (cart.length === 0) return <div className="p-8 text-center"><p>Cart is empty</p><button onClick={()=>navigate('/')} className="mt-4 text-red-600">Go Back</button></div>;
@@ -606,7 +633,7 @@ function Checkout() {
                   <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center font-bold text-white">P</div>
                   <span className="font-bold tracking-wider">PAYHERE SECURE</span>
                 </div>
-                <button onClick={() => setShowPaymentModal(false)} className="text-gray-400 hover:text-white">✕</button>
+                <button onClick={handlePaymentCancel} className="text-gray-400 hover:text-white">✕</button>
               </div>
               
               <div className="p-6">
@@ -691,7 +718,10 @@ function Checkout() {
             <input type="tel" placeholder="Phone Number" value={phone} onChange={e=>setPhone(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 outline-none focus:border-red-500 transition"/>
             <div className="flex gap-2">
               <input type="text" placeholder="Delivery Address" value={address} onChange={e=>setAddress(e.target.value)} className="flex-1 bg-gray-50 border border-gray-200 rounded-xl p-3 outline-none focus:border-red-500 transition"/>
-              <button onClick={getLoc} className="bg-gray-100 p-3 rounded-xl text-gray-600 hover:bg-gray-200 transition"><MapPin size={24}/></button>
+              <button onClick={getLoc} className={`flex items-center gap-2 p-3 rounded-xl transition ${!address ? 'bg-red-100 text-red-600 animate-pulse' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                <MapPin size={24}/>
+                {!address && <span className="font-bold text-sm whitespace-nowrap pr-2">Get Location</span>}
+              </button>
             </div>
           </div>
         </div>
@@ -853,14 +883,6 @@ function MyOrders() {
 
 function Profile() {
   const navigate = useNavigate();
-  const [user, setUser] = useState(() => JSON.parse(localStorage.getItem('mockUser') || 'null'));
-
-  const handleLogin = () => {
-    const u = { name: 'Customer User', email: 'customer@gmail.com' };
-    localStorage.setItem('mockUser', JSON.stringify(u));
-    setUser(u);
-    toast.success("Logged in with Google (Mock)");
-  };
 
   return (
     <div className="min-h-screen bg-spicy-pattern text-gray-900 pb-20 lg:pb-0">
@@ -870,57 +892,30 @@ function Profile() {
       </header>
 
       <main className="p-6 text-center max-w-md mx-auto">
-        {!user ? (
-          <div className="mt-20">
-            <div className="w-24 h-24 bg-white rounded-full mx-auto mb-6 flex items-center justify-center shadow-sm border border-gray-100">
-              <User size={40} className="text-gray-300" />
-            </div>
-            <h2 className="text-2xl font-bold mb-2">Welcome!</h2>
-            <p className="text-gray-500 mb-8">Sign in to save your orders and preferences.</p>
-            <button 
-              onClick={handleLogin}
-              className="bg-white border border-gray-200 text-gray-700 py-3 px-6 rounded-xl font-bold w-full hover:bg-gray-50 shadow-sm transition flex items-center justify-center gap-2"
-            >
-              <img src="https://www.svgrepo.com/show/475656/google-color.svg" alt="Google" className="w-5 h-5" />
-              Sign in with Google
+        <div className="mt-10">
+          <div className="w-24 h-24 bg-red-100 rounded-full mx-auto mb-6 flex items-center justify-center border-4 border-white shadow-sm">
+            <User size={40} className="text-red-600" />
+          </div>
+          <h2 className="text-2xl font-bold mb-8">Customer</h2>
+          
+          <div className="space-y-4 text-left">
+            <button onClick={() => navigate('/my-orders')} className="w-full bg-white p-4 rounded-xl flex items-center justify-between border border-gray-100 shadow-sm hover:shadow-md transition">
+              <span className="flex items-center gap-3 font-bold text-gray-700"><Clock className="text-red-500"/> My Orders</span>
+              <ChevronRight className="text-gray-400" />
             </button>
-            <div className="mt-8 text-sm text-gray-400 text-left space-y-2">
-              <p className="font-medium text-gray-500 border-b pb-1">Shop Details</p>
+            <button className="w-full bg-white p-4 rounded-xl flex items-center justify-between border border-gray-100 shadow-sm hover:shadow-md transition">
+              <span className="flex items-center gap-3 font-bold text-gray-700"><Star className="text-yellow-400"/> Leave Feedback</span>
+              <ChevronRight className="text-gray-400" />
+            </button>
+
+            <div className="mt-8 p-4 bg-white rounded-xl border border-gray-100 shadow-sm text-sm text-gray-500 space-y-2">
+              <p className="font-bold text-gray-700 border-b pb-2 mb-2">Shop Details</p>
               <p>Hotline: 0112345678</p>
               <p>Address: 5335+H5H, Veyangoda 11100</p>
               <p className="mt-4 pt-4 border-t italic text-xs">Developed by Dinuka Kasun & FB-THE CREATER</p>
             </div>
           </div>
-        ) : (
-          <div className="mt-10">
-            <div className="w-24 h-24 bg-red-100 rounded-full mx-auto mb-6 flex items-center justify-center border-4 border-white shadow-sm">
-              <span className="text-3xl font-bold text-red-600">C</span>
-            </div>
-            <h2 className="text-2xl font-bold mb-1">{user.name}</h2>
-            <p className="text-gray-500 mb-8">{user.email}</p>
-            
-            <div className="space-y-4 text-left">
-              <button onClick={() => navigate('/my-orders')} className="w-full bg-white p-4 rounded-xl flex items-center justify-between border border-gray-100 shadow-sm hover:shadow-md transition">
-                <span className="flex items-center gap-3 font-bold text-gray-700"><Clock className="text-red-500"/> My Orders</span>
-                <ChevronRight className="text-gray-400" />
-              </button>
-              <button className="w-full bg-white p-4 rounded-xl flex items-center justify-between border border-gray-100 shadow-sm hover:shadow-md transition">
-                <span className="flex items-center gap-3 font-bold text-gray-700"><Star className="text-yellow-400"/> Leave Feedback</span>
-                <ChevronRight className="text-gray-400" />
-              </button>
-              
-              <button 
-                onClick={() => {
-                  localStorage.removeItem('mockUser');
-                  setUser(null);
-                }}
-                className="w-full bg-white text-red-600 p-4 rounded-xl flex items-center justify-center gap-2 font-bold mt-8 border border-gray-200 shadow-sm hover:bg-red-50 transition"
-              >
-                <LogOut size={20} /> Sign Out
-              </button>
-            </div>
-          </div>
-        )}
+        </div>
       </main>
 
       {/* Mobile Bottom Navigation */}

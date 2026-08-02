@@ -1,7 +1,7 @@
 import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
-import { Pool } from 'pg';
+import Database from 'better-sqlite3';
 import path from 'path';
 import cors from 'cors';
 import { createServer as createViteServer } from 'vite';
@@ -17,14 +17,33 @@ app.use(cors());
 app.use(express.json());
 
 // Initialize PostgreSQL Database
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || 'postgresql://dmist2232%40gmail.com:200732503140@sisaranew-sisara-en5m2b:5432/SISARA'
-});
+const db = new Database('database.sqlite');
+db.pragma('journal_mode = WAL');
 
-// Add error handler on pool to prevent the app from crashing on idle client errors
-pool.on('error', (err, client) => {
-  console.error('Unexpected error on idle client', err);
-});
+const pool = {
+  query: async (text, params = []) => {
+    // Replace $1, $2 with ?
+    const sqliteText = text.replace(/\$\d+/g, '?');
+    
+    // SQLite doesn't support SERIAL, replace it with INTEGER PRIMARY KEY AUTOINCREMENT
+    // Only replacing in CREATE TABLE statements implicitly if needed, but better to do it directly in text
+    let modifiedText = sqliteText.replace(/SERIAL PRIMARY KEY/g, 'INTEGER PRIMARY KEY AUTOINCREMENT');
+    
+    try {
+      if (modifiedText.trim().toUpperCase().startsWith('SELECT') || modifiedText.trim().toUpperCase().startsWith('PRAGMA')) {
+        const rows = db.prepare(modifiedText).all(...params);
+        return { rows };
+      } else {
+        const result = db.prepare(modifiedText).run(...params);
+        return { rows: [], rowCount: result.changes };
+      }
+    } catch (e) {
+      console.error("DB Error:", e);
+      throw e;
+    }
+  },
+  on: () => {}
+};
 
 // Simple Schema Setup
 const initDb = async (retries = 1) => {
@@ -194,6 +213,7 @@ app.post('/api/orders', async (req, res) => {
     if (dateRow && dateRow.value !== today) {
       await pool.query("UPDATE settings SET value = $1 WHERE key = 'lastOrderDate'", [today]);
       await pool.query("UPDATE settings SET value = '1000' WHERE key = 'lastOrderNumber'");
+      await pool.query("DELETE FROM orders WHERE status = 'delivered' OR status = 'cancelled' OR status = 'rejected'");
     }
     
     const currentNumberRowRes = await pool.query("SELECT value FROM settings WHERE key = 'lastOrderNumber'");
@@ -222,7 +242,9 @@ app.post('/api/orders', async (req, res) => {
     
     broadcastOrders();
     io.emit('new_order_alert', { orderNumber: newOrderNumber });
-    res.json({ success: true, orderNumber: newOrderNumber });
+    const latestOrder = await pool.query('SELECT id FROM orders WHERE "orderNumber" = $1 ORDER BY id DESC LIMIT 1', [newOrderNumber]);
+    const id = latestOrder.rows[0]?.id;
+    res.json({ success: true, orderNumber: newOrderNumber, orderId: id });
   } catch (error) {
     console.error("Error creating order:", error);
     res.status(500).json({ error: "Failed to create order" });
@@ -230,6 +252,17 @@ app.post('/api/orders', async (req, res) => {
 });
 
 // Update Order
+app.delete('/api/orders/clear', async (req, res) => {
+  try {
+    await pool.query("DELETE FROM orders WHERE status = 'delivered' OR status = 'cancelled' OR status = 'rejected'");
+    broadcastOrders();
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Error clearing orders:", error);
+    res.status(500).json({ error: "Failed to clear orders" });
+  }
+});
+
 app.patch('/api/orders/:id', async (req, res) => {
   try {
     const { status, extraFee, deliveryGuyNumber } = req.body;

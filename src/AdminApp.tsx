@@ -2,7 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { Routes, Route, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useStore } from './store/useStore';
 import toast from 'react-hot-toast';
-import { LayoutDashboard, Users, ShoppingBag, Settings as SettingsIcon, LogOut, Bell, CheckCircle2, XCircle, Search, Edit2, MessageSquare, MapPin, Image as ImageIcon } from 'lucide-react';
+import { LayoutDashboard, Users, ShoppingBag, Settings as SettingsIcon, LogOut, Bell, CheckCircle2, XCircle, Search, Edit2, MessageSquare, MapPin, Image as ImageIcon, Printer, Trash2 } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
+import { startOfWeek, endOfWeek, startOfMonth, endOfMonth, isWithinInterval, parseISO, format } from 'date-fns';
 
 function AdminLogin({ onLogin }: { onLogin: (role: 'admin'|'host') => void }) {
   const [username, setUsername] = useState('');
@@ -117,6 +119,71 @@ function OrdersView() {
     toast.success(`Order status updated to ${status}`);
   };
 
+  const clearOldOrders = async () => {
+    if(confirm("Are you sure you want to clear all completed and cancelled orders?")) {
+      await fetch('/api/orders/clear', { method: 'DELETE' });
+      toast.success("Old orders cleared!");
+    }
+  };
+
+  const printBill = (order: any) => {
+    const printWindow = window.open('', '', 'width=600,height=800');
+    if(!printWindow) return;
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Bill - Order #${order.orderNumber}</title>
+          <style>
+            body { font-family: monospace; padding: 20px; width: 300px; margin: 0 auto; color: black; }
+            h1 { text-align: center; margin: 0 0 10px 0; font-size: 24px; }
+            .divider { border-bottom: 1px dashed black; margin: 10px 0; }
+            .flex { display: flex; justify-content: space-between; margin-bottom: 5px; }
+            .item { font-size: 14px; }
+            .bold { font-weight: bold; }
+            .center { text-align: center; }
+          </style>
+        </head>
+        <body>
+          <h1>GRAND SPICY</h1>
+          <div class="center">5335+H5H, Veyangoda 11100</div>
+          <div class="center">Tel: 0112345678</div>
+          <div class="divider"></div>
+          <div>Order #: ${order.orderNumber}</div>
+          <div>Date: ${new Date(order.createdAt).toLocaleString()}</div>
+          <div>Customer: ${order.customerName}</div>
+          <div>Phone: ${order.phone}</div>
+          <div class="divider"></div>
+          ${order.items.map((i:any) => `
+            <div class="flex item">
+              <span>${i.name} ${i.quantity ? 'x'+i.quantity : ''}</span>
+              <span>Rs. ${i.price}</span>
+            </div>
+          `).join('')}
+          <div class="divider"></div>
+          <div class="flex item">
+            <span>Subtotal:</span>
+            <span>Rs. ${order.total - order.deliveryCharge}</span>
+          </div>
+          <div class="flex item">
+            <span>Delivery:</span>
+            <span>Rs. ${order.deliveryCharge}</span>
+          </div>
+          ${order.extraFee ? `<div class="flex item text-red-500"><span>Extra Fee:</span><span>Rs. ${order.extraFee}</span></div>` : ''}
+          <div class="divider"></div>
+          <div class="flex bold" style="font-size:18px;">
+            <span>TOTAL:</span>
+            <span>Rs. ${order.total + (order.extraFee || 0)}</span>
+          </div>
+          <div class="divider"></div>
+          <div class="center item">Payment: ${order.paymentMethod.toUpperCase()}</div>
+          <div class="center" style="margin-top:20px;">Thank You!</div>
+          <script>window.print(); setTimeout(()=>window.close(), 500);</script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
   const updateFeeOrRider = async (id: number, field: string, value: string|number) => {
     await fetch(`/api/orders/${id}`, {
       method: 'PATCH',
@@ -130,6 +197,9 @@ function OrdersView() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold text-stone-800">Live Orders</h1>
+        <button onClick={clearOldOrders} className="bg-red-100 text-red-600 px-4 py-2 rounded-xl font-bold flex items-center gap-2 hover:bg-red-200 transition">
+          <Trash2 size={16} /> Clear Old Orders
+        </button>
         <div className="flex gap-2">
           {['all', 'pending', 'accepted', 'cooking', 'onway', 'delivered', 'cancelled'].map(f => (
             <button 
@@ -151,7 +221,8 @@ function OrdersView() {
                   <h3 className="text-xl font-bold">Order #{order.orderNumber}</h3>
                   <p className="text-stone-500 text-sm">{new Date(order.createdAt).toLocaleString()}</p>
                 </div>
-                <div className="text-right">
+                <div className="text-right flex items-center gap-3">
+                  <button onClick={() => printBill(order)} className="text-stone-500 hover:text-[#3E1111] transition"><Printer size={20}/></button>
                   <span className={`px-3 py-1 rounded-full text-sm font-bold capitalize border
                     ${order.status === 'pending' ? 'bg-stone-100 text-stone-700' : 
                       order.status === 'accepted' ? 'bg-blue-100 text-blue-700' : 
@@ -168,9 +239,14 @@ function OrdersView() {
                 <div className="col-span-2 flex items-start justify-between">
                   <div><span className="text-stone-500">Address:</span> <span className="font-bold">{order.location}</span></div>
                   {order.lat && order.lng ? (
-                    <a href={`https://www.google.com/maps?q=${order.lat},${order.lng}`} target="_blank" rel="noreferrer" className="text-sm bg-blue-600 text-white px-4 py-2 rounded-xl shadow-md whitespace-nowrap flex items-center gap-2 hover:bg-blue-700 transition transform hover:scale-105 animate-bounce">
-                      <MapPin size={16} /> View on Map
-                    </a>
+                    <div className="flex gap-2">
+                      <a href={`https://www.google.com/maps?q=${order.lat},${order.lng}`} target="_blank" rel="noreferrer" className="text-sm bg-blue-600 text-white px-4 py-2 rounded-xl shadow-md whitespace-nowrap flex items-center gap-2 hover:bg-blue-700 transition transform hover:scale-105">
+                        <MapPin size={16} /> View on Map
+                      </a>
+                      <a href={`https://wa.me/?text=${encodeURIComponent('Order location: https://www.google.com/maps?q=' + order.lat + ',' + order.lng)}`} target="_blank" rel="noreferrer" className="text-sm bg-green-500 text-white px-4 py-2 rounded-xl shadow-md whitespace-nowrap flex items-center gap-2 hover:bg-green-600 transition transform hover:scale-105">
+                        <MessageSquare size={16} /> WhatsApp
+                      </a>
+                    </div>
                   ) : null}
                 </div>
                 <div className="col-span-2"><span className="text-stone-500">Notes:</span> <span className="font-bold text-amber-700">{order.extraNotes || 'None'}</span></div>
@@ -330,29 +406,62 @@ function HostDashboard() {
     toast.success(`Settings updated`);
   };
 
-  const today = new Date().toISOString().split('T')[0];
-  const todayOrders = orders.filter(o => o.createdAt.startsWith(today) && o.status !== 'cancelled');
+  const today = new Date();
+  const todayStr = today.toISOString().split('T')[0];
+  const activeOrders = orders.filter(o => o.status !== 'cancelled' && o.status !== 'rejected');
+  
+  const todayOrders = activeOrders.filter(o => o.createdAt.startsWith(todayStr));
   const todaySales = todayOrders.reduce((acc, curr) => acc + curr.total + curr.extraFee, 0);
+
+  const thisWeekOrders = activeOrders.filter(o => isWithinInterval(parseISO(o.createdAt), { start: startOfWeek(today), end: endOfWeek(today) }));
+  const weekSales = thisWeekOrders.reduce((acc, curr) => acc + curr.total + curr.extraFee, 0);
+
+  const thisMonthOrders = activeOrders.filter(o => isWithinInterval(parseISO(o.createdAt), { start: startOfMonth(today), end: endOfMonth(today) }));
+  const monthSales = thisMonthOrders.reduce((acc, curr) => acc + curr.total + curr.extraFee, 0);
+
+  const last7Days = Array.from({ length: 7 }).map((_, i) => {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const dStr = d.toISOString().split('T')[0];
+    const dayOrders = activeOrders.filter(o => o.createdAt.startsWith(dStr));
+    const daySales = dayOrders.reduce((acc, curr) => acc + curr.total + curr.extraFee, 0);
+    return { name: format(d, 'MMM dd'), sales: daySales };
+  }).reverse();
 
   return (
     <div className="space-y-8">
-      <h1 className="text-3xl font-bold text-stone-800">Host Dashboard</h1>
+      <h1 className="text-3xl font-bold text-stone-800">Host Dashboard & Analytics</h1>
       
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-gradient-to-br from-amber-500 to-orange-600 p-6 rounded-2xl text-white shadow-lg">
           <h3 className="text-white/80 font-bold mb-2">Today's Sales</h3>
           <p className="text-4xl font-bold">Rs. {todaySales}</p>
-          <p className="text-sm mt-2">{todayOrders.length} Completed/Active Orders</p>
+          <p className="text-sm mt-2">{todayOrders.length} Orders</p>
         </div>
-        <div className="bg-white p-6 rounded-2xl border border-stone-200 shadow-sm md:col-span-2">
-          <h3 className="text-stone-500 font-bold mb-4 uppercase text-xs">Email Statements</h3>
-          <p className="text-sm text-stone-600 mb-4">
-            Daily, weekly, and monthly statements can be sent to the configured host email address. (Requires backend cron setup).
-          </p>
-          <div className="flex gap-4">
-            <input type="email" placeholder="Host Email Address" className="p-3 border border-stone-200 rounded-xl flex-1" />
-            <button className="bg-[#3E1111] text-white px-6 py-3 rounded-xl font-bold">Save Email</button>
-          </div>
+        <div className="bg-gradient-to-br from-blue-500 to-blue-700 p-6 rounded-2xl text-white shadow-lg">
+          <h3 className="text-white/80 font-bold mb-2">This Week</h3>
+          <p className="text-4xl font-bold">Rs. {weekSales}</p>
+          <p className="text-sm mt-2">{thisWeekOrders.length} Orders</p>
+        </div>
+        <div className="bg-gradient-to-br from-emerald-500 to-emerald-700 p-6 rounded-2xl text-white shadow-lg">
+          <h3 className="text-white/80 font-bold mb-2">This Month</h3>
+          <p className="text-4xl font-bold">Rs. {monthSales}</p>
+          <p className="text-sm mt-2">{thisMonthOrders.length} Orders</p>
+        </div>
+      </div>
+
+      <div className="bg-white p-6 rounded-2xl shadow-sm border border-stone-200">
+        <h3 className="font-bold text-stone-600 mb-6">Last 7 Days Sales Analysis</h3>
+        <div className="h-[300px] w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={last7Days}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
+              <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#6B7280'}} />
+              <YAxis axisLine={false} tickLine={false} tick={{fill: '#6B7280'}} tickFormatter={(value) => `Rs.${value}`} />
+              <RechartsTooltip cursor={{fill: '#F3F4F6'}} contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}} />
+              <Bar dataKey="sales" fill="#3E1111" radius={[4, 4, 0, 0]} maxBarSize={40} />
+            </BarChart>
+          </ResponsiveContainer>
         </div>
       </div>
 
@@ -516,7 +625,7 @@ function BannersView() {
         <form onSubmit={addBanner} className="flex gap-4 mb-6">
           <input 
             type="url" 
-            placeholder="Image URL" 
+            placeholder="Image or Video URL" 
             value={newBanner} 
             onChange={(e) => setNewBanner(e.target.value)} 
             className="flex-1 p-3 bg-stone-50 border border-stone-200 rounded-xl"
